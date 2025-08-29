@@ -1,243 +1,261 @@
---// Roblox UI Script with Teleport, WalkSpeed, Phones, Settings
--- Авторская сборка
-
+-- Services
 local Players = game:GetService("Players")
-local UIS = game:GetService("UserInputService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
 local lp = Players.LocalPlayer
-local char = lp.Character or lp.CharacterAdded:Wait()
-local humanoid = char:WaitForChild("Humanoid")
-local hrp = char:WaitForChild("HumanoidRootPart")
+local hrp = lp.Character and lp.Character:WaitForChild("HumanoidRootPart")
 
--- Vars
-local wsValue = 16
-local infJump = false
-local antiRagdoll = false
-local savedPos = nil
+-- UI
+local ScreenGui = Instance.new("ScreenGui", lp.PlayerGui)
+ScreenGui.ResetOnSpawn = false
 
--- Themes
-local Themes = {
-    Dark = {bg=Color3.fromRGB(30,30,30), btn=Color3.fromRGB(60,60,60), txt=Color3.new(1,1,1), alpha=0.85},
-    Light = {bg=Color3.fromRGB(240,240,240), btn=Color3.fromRGB(200,200,200), txt=Color3.new(0,0,0), alpha=0.9},
-    Blue = {bg=Color3.fromRGB(25,25,60), btn=Color3.fromRGB(60,60,140), txt=Color3.new(1,1,1), alpha=0.85},
-}
-local Theme = Themes.Dark
+-- Main Frame
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 400, 0, 300)
+MainFrame.Position = UDim2.new(0.3, 0, 0.3, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+MainFrame.Active = true
+MainFrame.Draggable = true
 
--- UI Helpers
-local function mkPanel(parent, size, pos)
-    local f = Instance.new("Frame", parent)
-    f.Size, f.Position = size, pos
-    f.BackgroundColor3 = Theme.bg
-    f.BackgroundTransparency = 1 - Theme.alpha
-    f.BorderSizePixel = 0
-    return f
+-- UI Scaling
+local UIScale = Instance.new("UIScale", MainFrame)
+UIScale.Scale = 1
+
+-- Tabs
+local TabButtons = Instance.new("Frame", MainFrame)
+TabButtons.Size = UDim2.new(1,0,0,30)
+TabButtons.BackgroundTransparency = 1
+
+local Tabs = Instance.new("Frame", MainFrame)
+Tabs.Position = UDim2.new(0,0,0,30)
+Tabs.Size = UDim2.new(1,0,1,-30)
+Tabs.BackgroundTransparency = 1
+
+-- Functions
+local function createTab(name)
+    local tab = Instance.new("ScrollingFrame", Tabs)
+    tab.Name = name
+    tab.Size = UDim2.new(1,0,1,0)
+    tab.CanvasSize = UDim2.new(0,0,0,0)
+    tab.ScrollBarThickness = 6
+    tab.Visible = false
+    return tab
 end
 
-local function mkLabel(parent, text)
-    local l = Instance.new("TextLabel", parent)
-    l.Size = UDim2.new(1,0,0,20)
-    l.BackgroundTransparency = 1
-    l.TextColor3 = Theme.txt
-    l.Text = text
-    l.Font, l.TextSize = Enum.Font.SourceSans, 18
-    l.TextXAlignment = Enum.TextXAlignment.Left
-    return l
-end
-
-local function mkButton(parent, text, style)
-    local b = Instance.new("TextButton", parent)
-    b.Size = UDim2.new(0,120,0,28)
-    b.BackgroundColor3 = Theme.btn
-    b.TextColor3 = Theme.txt
+local function createButton(tab, text, pos, callback)
+    local b = Instance.new("TextButton", tab)
+    b.Size = UDim2.new(0,200,0,40)
+    b.Position = pos
     b.Text = text
-    b.Font, b.TextSize = Enum.Font.SourceSans, 18
-    b.AutoButtonColor = true
+    b.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    b.TextColor3 = Color3.fromRGB(255,255,255)
+    b.MouseButton1Click:Connect(callback)
     return b
 end
 
-local function mkSlider(parent, label, min, max, val, callback)
-    local holder = Instance.new("Frame", parent)
-    holder.Size, holder.BackgroundTransparency = UDim2.new(1,-8,0,48), 1
-
-    local title = mkLabel(holder, label..": "..val)
-    title.Size = UDim2.new(1,0,0,20)
-
-    local bar = Instance.new("Frame", holder)
-    bar.Size, bar.Position = UDim2.new(1,-20,0,8), UDim2.new(0,10,0,28)
-    bar.BackgroundColor3, bar.BorderSizePixel = Theme.btn, 0
-
-    local fill = Instance.new("Frame", bar)
-    fill.Size, fill.BackgroundColor3, fill.BorderSizePixel = UDim2.new((val-min)/(max-min),0,1,0), Theme.txt, 0
-
-    local dragging = false
-    bar.InputBegan:Connect(function(input)
-        if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=true end
-    end)
-    UIS.InputEnded:Connect(function(input)
-        if input.UserInputType==Enum.UserInputType.MouseButton1 then dragging=false end
-    end)
-    UIS.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType==Enum.UserInputType.MouseMovement then
-            local rel = math.clamp((input.Position.X-bar.AbsolutePosition.X)/bar.AbsoluteSize.X,0,1)
-            val = math.floor(min + rel*(max-min))
-            fill.Size = UDim2.new(rel,0,1,0)
-            title.Text = label..": "..val
-            callback(val)
+-- Tab buttons
+local function makeTabButton(name, index)
+    local btn = Instance.new("TextButton", TabButtons)
+    btn.Size = UDim2.new(0,100,1,0)
+    btn.Position = UDim2.new(0,(index-1)*100,0,0)
+    btn.Text = name
+    btn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.MouseButton1Click:Connect(function()
+        for _,t in pairs(Tabs:GetChildren()) do
+            if t:IsA("ScrollingFrame") then
+                t.Visible = false
+            end
         end
+        Tabs:FindFirstChild(name.."Tab").Visible = true
     end)
-
-    return {setValue=function(v)
-        val=v
-        local rel=(v-min)/(max-min)
-        fill.Size=UDim2.new(rel,0,1,0)
-        title.Text=label..": "..v
-    end}
 end
-
--- Main ScreenGui
-local sg = Instance.new("ScreenGui", game.CoreGui)
-sg.ResetOnSpawn = false
-
-local mainFrame = Instance.new("Frame", sg)
-mainFrame.Size, mainFrame.Position = UDim2.new(0,500,0,300), UDim2.new(0.5,-250,0.5,-150)
-mainFrame.BackgroundColor3, mainFrame.BackgroundTransparency, mainFrame.BorderSizePixel = Theme.bg, 1-Theme.alpha, 0
-mainFrame.Active, mainFrame.Draggable = true, true
 
 -- Tabs
-local tabs = Instance.new("Frame", mainFrame)
-tabs.Size = UDim2.new(0,100,1,0)
-tabs.BackgroundTransparency = 1
+local TeleportTab = createTab("TeleportTab")
+local WalkspeedTab = createTab("WalkspeedTab")
+local PhonesTab = createTab("PhonesTab")
+local SettingsTab = createTab("SettingsTab")
 
-local pages = {}
-local function createPage(name)
-    local btn = mkButton(tabs,name,"tab")
-    btn.Size=UDim2.new(1,0,0,28)
-    btn.Position=UDim2.new(0,0,0,#tabs:GetChildren()*30)
-    local page=Instance.new("Frame",mainFrame)
-    page.Size, page.Position, page.Visible, page.BackgroundTransparency = UDim2.new(1,-100,1,0), UDim2.new(0,100,0,0), false,1
-    pages[name]=page
-    btn.MouseButton1Click:Connect(function()
-        for n,p in pairs(pages)do p.Visible=(n==name)end
-    end)
-    return page
+makeTabButton("Teleport",1)
+makeTabButton("Walk/Anti",2)
+makeTabButton("Phones",3)
+makeTabButton("Settings",4)
+
+TeleportTab.Visible = true
+
+-- TELEPORT TAB
+local savedPos = nil
+createButton(TeleportTab,"Save Point",UDim2.new(0,10,0,10),function()
+    if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        savedPos = lp.Character.HumanoidRootPart.CFrame
+    end
+end)
+
+createButton(TeleportTab,"TP to Saved",UDim2.new(0,10,0,60),function()
+    if savedPos and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        lp.Character.HumanoidRootPart.CFrame = savedPos
+    end
+end)
+
+-- Teleport to players
+local y = 120
+for _,plr in pairs(Players:GetPlayers()) do
+    if plr ~= lp then
+        local btn = createButton(TeleportTab,"TP to "..plr.Name,UDim2.new(0,10,0,y),function()
+            if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+                lp.Character.HumanoidRootPart.CFrame = plr.Character.HumanoidRootPart.CFrame + Vector3.new(2,0,0)
+            end
+        end)
+        y = y + 50
+    end
 end
 
--- === Teleport Page ===
-do
-    local page=createPage("Teleport")
-    local panel=mkPanel(page,UDim2.new(1,-8,1,-8),UDim2.new(0,4,0,4))
+-- WALK/ANTI TAB
+local hum = lp.Character and lp.Character:WaitForChild("Humanoid")
 
-    local saveBtn=mkButton(panel,"Save Point")
-    saveBtn.Position=UDim2.new(0,8,0,8)
-    saveBtn.MouseButton1Click:Connect(function() savedPos=hrp.Position end)
+local WalkButton = createButton(WalkspeedTab,"WalkSpeed: "..(hum and hum.WalkSpeed or 16),UDim2.new(0,10,0,10),function()
+    if hum then
+        hum.WalkSpeed = (hum.WalkSpeed==16 and 50 or 16)
+        WalkButton.Text = "WalkSpeed: "..hum.WalkSpeed
+    end
+end)
 
-    local tpBtn=mkButton(panel,"TP to Point")
-    tpBtn.Position=UDim2.new(0,8,0,44)
-    tpBtn.MouseButton1Click:Connect(function() if savedPos then hrp.CFrame=CFrame.new(savedPos) end end)
+local ragdollEnabled = false
+local AntiRagdoll = createButton(WalkspeedTab,"Anti-Ragdoll: OFF",UDim2.new(0,10,0,60),function()
+    ragdollEnabled = not ragdollEnabled
+    AntiRagdoll.Text = ragdollEnabled and "Anti-Ragdoll: ON" or "Anti-Ragdoll: OFF"
+end)
 
-    -- клавиши по умолчанию
-    local forwardKey, backKey = Enum.KeyCode.B, Enum.KeyCode.N
-    UIS.InputBegan:Connect(function(i,g)
-        if g then return end
-        if i.KeyCode==forwardKey then hrp.CFrame=hrp.CFrame+hrp.CFrame.LookVector*10 end
-        if i.KeyCode==backKey and savedPos then hrp.CFrame=CFrame.new(savedPos) end
-    end)
-end
-
--- === WalkSpeed Page ===
-do
-    local page=createPage("WalkSpeed")
-    local panel=mkPanel(page,UDim2.new(1,-8,1,-8),UDim2.new(0,4,0,4))
-
-    local wsLabel=mkLabel(panel,"WalkSpeed: "..wsValue)
-    wsLabel.Position=UDim2.new(0,8,0,8)
-
-    local slider=mkSlider(panel,"WalkSpeed",16,100,wsValue,function(v)
-        wsValue=v
-        if humanoid then humanoid.WalkSpeed=v end
-        wsLabel.Text="WalkSpeed: "..v
-    end)
-
-    local reset=mkButton(panel,"Reset WalkSpeed")
-    reset.Position=UDim2.new(0,8,0,84)
-    reset.MouseButton1Click:Connect(function()
-        wsValue=16
-        if humanoid then humanoid.WalkSpeed=16 end
-        wsLabel.Text="WalkSpeed: 16"
-        slider.setValue(16)
-    end)
-
-    local infBtn=mkButton(panel,"Infinite Jump: OFF")
-    infBtn.Position=UDim2.new(0,8,0,120)
-    infBtn.MouseButton1Click:Connect(function()
-        infJump=not infJump
-        infBtn.Text="Infinite Jump: "..(infJump and "ON" or "OFF")
-    end)
-    UIS.JumpRequest:Connect(function() if infJump and humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end end)
-
-    local arBtn=mkButton(panel,"Anti-Ragdoll: OFF")
-    arBtn.Position=UDim2.new(0,8,0,156)
-    arBtn.MouseButton1Click:Connect(function()
-        antiRagdoll=not antiRagdoll
-        arBtn.Text="Anti-Ragdoll: "..(antiRagdoll and "ON" or "OFF")
-    end)
-    humanoid.StateChanged:Connect(function(_,s)
-        if antiRagdoll and (s==Enum.HumanoidStateType.Ragdoll or s==Enum.HumanoidStateType.FallingDown) then
-            humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+RunService.Stepped:Connect(function()
+    if ragdollEnabled and lp.Character and lp.Character:FindFirstChildOfClass("Humanoid") then
+        local h = lp.Character:FindFirstChildOfClass("Humanoid")
+        if h:GetState() == Enum.HumanoidStateType.Ragdoll then
+            h:ChangeState(Enum.HumanoidStateType.GettingUp)
         end
-    end)
-end
+    end
+end)
 
--- === Phones Page ===
-do
-    local page=createPage("Phones")
-    local panel=mkPanel(page,UDim2.new(1,-8,1,-8),UDim2.new(0,4,0,4))
-    local list=Instance.new("ScrollingFrame",panel)
-    list.Size, list.CanvasSize, list.ScrollBarThickness = UDim2.new(1,0,1,0), UDim2.new(), 6
-    list.BackgroundTransparency=1
+-- PHONES TAB
+local function refreshPhones()
+    PhonesTab:ClearAllChildren()
+    local listLayout = Instance.new("UIListLayout",PhonesTab)
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
-    local function refresh()
-        list:ClearAllChildren()
-        local y=0
-        for _,plr in ipairs(Players:GetPlayers()) do
-            local btn=mkButton(list,plr.Name)
-            btn.Position=UDim2.new(0,0,0,y)
-            y=y+32
-            local open=false
-            btn.MouseButton1Click:Connect(function()
-                open=not open
-                for _,c in pairs(list:GetChildren()) do
-                    if c:IsA("TextLabel") and c.Name=="Phone"..plr.Name then c:Destroy() end
-                end
-                if open then
-                    for i=1,3 do
-                        local phone=mkLabel(list,"Phone"..i.."_"..plr.Name)
-                        phone.Name="Phone"..plr.Name
-                        phone.Position=UDim2.new(0,20,0,y)
-                        y=y+20
+    for _,plr in pairs(Players:GetPlayers()) do
+        local playerBtn = Instance.new("TextButton",PhonesTab)
+        playerBtn.Size = UDim2.new(1,-10,0,30)
+        playerBtn.Text = plr.Name.." [+]"
+        playerBtn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+        playerBtn.TextColor3 = Color3.new(1,1,1)
+
+        local expanded = false
+        playerBtn.MouseButton1Click:Connect(function()
+            expanded = not expanded
+            playerBtn.Text = plr.Name..(expanded and " [-]" or " [+]")
+
+            if expanded then
+                for _,obj in pairs(plr:FindFirstChild("stats") and plr.stats:FindFirstChild("PlotNPC") and plr.stats.PlotNPC:GetChildren() or {}) do
+                    if obj:IsA("ValueBase") then
+                        local phone = Instance.new("TextLabel",PhonesTab)
+                        phone.Size = UDim2.new(1,-30,0,25)
+                        phone.Text = tostring(obj.Value)
+                        phone.BackgroundColor3 = Color3.fromRGB(70,70,70)
+                        phone.TextColor3 = Color3.new(1,1,1)
                     end
                 end
-            end)
+            else
+                for _,c in pairs(PhonesTab:GetChildren()) do
+                    if c:IsA("TextLabel") and c.Text ~= nil and c.Text ~= "" and c.Text~=plr.Name then
+                        c:Destroy()
+                    end
+                end
+            end
+        end)
+    end
+end
+refreshPhones()
+Players.PlayerAdded:Connect(refreshPhones)
+Players.PlayerRemoving:Connect(refreshPhones)
+
+-- SETTINGS TAB
+local bKey, nKey = Enum.KeyCode.B, Enum.KeyCode.N
+
+local function makeSettingButton(text,pos,callback)
+    local b = Instance.new("TextButton",SettingsTab)
+    b.Size = UDim2.new(0,200,0,40)
+    b.Position = pos
+    b.Text = text
+    b.BackgroundColor3 = Color3.fromRGB(60,60,60)
+    b.TextColor3 = Color3.new(1,1,1)
+    b.MouseButton1Click:Connect(callback)
+    return b
+end
+
+local scaleBtn = makeSettingButton("Scale: "..UIScale.Scale,UDim2.new(0,10,0,10),function()
+    UIScale.Scale = UIScale.Scale==1 and 1.5 or 1
+    scaleBtn.Text = "Scale: "..UIScale.Scale
+end)
+
+-- Themes
+local themes = {
+    Dark = {bg=Color3.fromRGB(30,30,30), btn=Color3.fromRGB(50,50,50)},
+    Light = {bg=Color3.fromRGB(200,200,200), btn=Color3.fromRGB(240,240,240)},
+    Red = {bg=Color3.fromRGB(60,0,0), btn=Color3.fromRGB(120,0,0)}
+}
+local currentTheme = "Dark"
+
+local themeBtn = makeSettingButton("Theme: "..currentTheme,UDim2.new(0,10,0,60),function()
+    if currentTheme=="Dark" then currentTheme="Light"
+    elseif currentTheme=="Light" then currentTheme="Red"
+    else currentTheme="Dark" end
+    themeBtn.Text="Theme: "..currentTheme
+    MainFrame.BackgroundColor3 = themes[currentTheme].bg
+    for _,t in pairs(Tabs:GetChildren()) do
+        for _,c in pairs(t:GetChildren()) do
+            if c:IsA("TextButton") then
+                c.BackgroundColor3 = themes[currentTheme].btn
+            end
         end
-        list.CanvasSize=UDim2.new(0,0,0,y)
     end
-    refresh()
-    game:GetService("RunService").Stepped:Connect(refresh)
-end
+end)
 
--- === Settings Page ===
-do
-    local page=createPage("Settings")
-    local panel=mkPanel(page,UDim2.new(1,-8,1,-8),UDim2.new(0,4,0,4))
+-- Binds
+makeSettingButton("Change B Bind ("..bKey.Name..")",UDim2.new(0,10,0,110),function()
+    bKey = nil
+    themeBtn.Text = "Press new B key..."
+    local conn; conn = UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType==Enum.UserInputType.Keyboard then
+            bKey=input.KeyCode
+            themeBtn.Text = "Theme: "..currentTheme
+            conn:Disconnect()
+        end
+    end)
+end)
 
-    mkLabel(panel,"Theme:")
-    local y=24
-    for name,_ in pairs(Themes) do
-        local btn=mkButton(panel,name)
-        btn.Position=UDim2.new(0,8,0,y)
-        y=y+32
-        btn.MouseButton1Click:Connect(function() Theme=Themes[name] end)
+makeSettingButton("Change N Bind ("..nKey.Name..")",UDim2.new(0,10,0,160),function()
+    nKey = nil
+    themeBtn.Text = "Press new N key..."
+    local conn; conn = UserInputService.InputBegan:Connect(function(input)
+        if input.UserInputType==Enum.UserInputType.Keyboard then
+            nKey=input.KeyCode
+            themeBtn.Text = "Theme: "..currentTheme
+            conn:Disconnect()
+        end
+    end)
+end)
+
+-- B/N actions
+UserInputService.InputBegan:Connect(function(input,proc)
+    if proc then return end
+    if input.KeyCode==bKey then
+        if lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+            lp.Character.HumanoidRootPart.CFrame = lp.Character.HumanoidRootPart.CFrame + lp.Character.HumanoidRootPart.CFrame.LookVector*10
+        end
+    elseif input.KeyCode==nKey then
+        if savedPos and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+            lp.Character.HumanoidRootPart.CFrame = savedPos
+        end
     end
-end
-
--- default open Teleport
-pages.Teleport.Visible=true
+end)
